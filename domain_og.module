@@ -1,0 +1,83 @@
+<?php
+/**
+ * Bridge module to allow Domain Access and Organic Groups permissions
+ * to coexist by creating a different node_access "realm" that merges the
+ * node_access rules of both modules
+ *
+ * From http://drupal.org/node/1355272
+ * 
+ * Thanks for the help and input to agentrickard and BrightBold
+ */
+
+/**
+ * Defines a separator between the Domain Access and Organic Groups "gid" so they
+ * form a single realm. Since "gid" of a node_access entry must be numeric we need
+ * the separator to be a number as well.
+ * 
+ * Kind of hacky but works with up to 10989 domains, as if we would ever 
+ * need that many
+ */
+define('DOMAIN_OG_SEPARATOR', '0990');
+
+/**
+ * Implements hook_node_access_records_alter().
+ * 
+ * Creates a different node_access "realm" (domain_og) by mergeing the node_access settings of the
+ * Domain Access and the Organic Group modules.
+ */
+function domain_og_node_access_records_alter(&$grants, $node) {
+    
+    $domain_set = FALSE;
+    $og_set     = FALSE;
+    $domain_ids = array();
+    $og_grants  = array();
+   
+    foreach ($grants as $grant) {
+        if($grant['realm'] == 'domain_id') {
+            $domain_ids[] = $grant['gid'];
+        } else if($grant['realm'] == 'group_access_authenticated') {
+            $og_grants[] = $grant;
+        }
+    }
+   
+    foreach($og_grants as $og_grant) {
+        foreach($domain_ids as $domain_id) {
+            $domain_og_grant = array(
+                'realm'        => 'domain_og',
+                'gid'          => $domain_id . DOMAIN_OG_SEPARATOR . $og_grant['gid'],
+                'grant_view'   => $og_grant['grant_view'],
+                'grant_update' => $og_grant['grant_update'],
+                'grant_delete' => $og_grant['grant_delete'],
+                'priority'     => 0,
+                '#module'      => 'domain_og',
+            );
+            $grants[] = $domain_og_grant;
+        }
+    }
+}
+
+/**
+ * Implements hook_node_grants_alter().
+ * 
+ * Based on the new node_access "realm" (domain_og) it grants or revokes access to nodes while ignoring the
+ * original node_access settings in Domain Access and Organic Groups
+ */
+function domain_og_node_grants_alter(&$grants, $account, $op) {
+   
+    if(isset($grants['domain_id']) && isset($grants['group_access_authenticated'])) {
+        $user_domains = $grants['domain_id'];
+        $user_groups  = $grants['group_access_authenticated'];
+        $domain_og_grants    = array();
+        foreach($user_groups as $og) {
+            foreach($user_domains as $domain_id) {
+                $domain_og_grants['domain_og'][] = $domain_id . DOMAIN_OG_SEPARATOR . $og;
+            }
+        }
+       
+        $grants = array_merge($domain_og_grants, $grants);
+       
+        //print_r($grants);
+        unset($grants['domain_id']);
+        unset($grants['group_access_authenticated']);
+    }
+}
