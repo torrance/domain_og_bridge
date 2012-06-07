@@ -16,6 +16,8 @@
  * 
  * Kind of hacky but works with up to 10989 domains, as if we would ever 
  * need that many
+ * 
+ * @TODO Find a better solution to do this if there is any...
  */
 define('DOMAIN_OG_SEPARATOR', '0990');
 
