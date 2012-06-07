@@ -1,1 +1,7 @@
 name = Domain Access OG Bridge
+description = Combines node access settings of the Domain Access and Organic Groups modules into a new access realm
+core = 7.x
+package = Domain Access
+
+version = "7.x-1.x-dev"
+core = "7.x"
