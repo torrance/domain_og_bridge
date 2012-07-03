@@ -10,17 +10,26 @@
  */
 
 /**
- * Defines a separator between the Domain Access and Organic Groups "gid" so they
- * form a single realm. Since "gid" of a node_access entry must be numeric we
- * need
- * the separator to be a number as well.
+ * Defines a separator between the Domain Access and Organic Groups "gid" so
+ * they form a single realm. Since "gid" of a node_access entry must be numeric
+ * we need the separator to be a number as well.
  *
  * Kind of hacky but works with up to 10989 domains, as if we would ever
  * need that many
  *
  * @TODO Find a better solution to do this if there is any...
  */
-define('DOMAIN_OG_SEPARATOR', '0990');
+define('DOMAIN_OG_SEPARATOR', '999');
+
+/**
+ * Implements hook_enable(). 
+ *
+ * Prompt the site admin to rebuild the node_access table when 
+ * this module is enabled.
+ */
+function domain_og_enable() {
+  node_access_needs_rebuild(TRUE);
+}
 
 /**
  * Implements hook_node_access_records_alter().
@@ -29,24 +38,49 @@ define('DOMAIN_OG_SEPARATOR', '0990');
  * node_access settings of the Domain Access and the Organic Group modules.
  */
 function domain_og_node_access_records_alter(&$grants, $node) {
-  $domain_set = FALSE;
-  $og_set = FALSE;
   $domain_ids = array();
   $og_grants = array();
 
-  foreach ($grants as $grant) {
-    if ($grant['realm'] == 'domain_id') {
-      $domain_ids[] = $grant['gid'];
-    }
-    else if ($grant['realm'] == 'group_access_authenticated') {
-      $og_grants[] = $grant;
+  foreach ($grants as $key => $grant) {
+    switch ($grant['realm']) {
+      case 'domain_id':
+        $domain_ids[] = $grant['gid'];
+        break;
+      // We treat domain_site as just another domain with id = 0.
+      case 'domain_site':
+        $domain_ids[] = '0';
+        break;
+      case 'group_access_authenticated':
+        $og_grants[] = $grant;
+        break;
     }
   }
 
-  foreach ($og_grants as $og_grant) {
-    foreach ($domain_ids as $domain_id) {
-      $domain_og_grant = array('realm' => 'domain_og', 'gid' => $domain_id . DOMAIN_OG_SEPARATOR . $og_grant['gid'], 'grant_view' => $og_grant['grant_view'], 'grant_update' => $og_grant['grant_update'], 'grant_delete' => $og_grant['grant_delete'], 'priority' => 0, '#module' => 'domain_og', );
-      $grants[] = $domain_og_grant;
+  // If there are access records for both domain and og, then we create our own
+  // combined record.
+  foreach ($domain_ids as $domain_id) {
+    foreach ($og_grants as $og_grant) {
+      $grants[] = array(
+        'realm' => 'domain_og',
+        'gid' => DOMAIN_OG_SEPARATOR . $domain_id . DOMAIN_OG_SEPARATOR . $og_grant['gid'],
+        'grant_view' => $og_grant['grant_view'],
+        'grant_update' => $og_grant['grant_update'],
+        'grant_delete' => $og_grant['grant_delete'],
+        'priority' => 0, '#module' => 'domain_og',
+      );
+    }
+  }
+
+  // If both domain grants and og grants exist for this node, then we are now
+  // managing access to this node. Delete their grants from entering the record.
+  if (!empty($domain_ids) && !empty($og_grants)) {
+    foreach ($grants as $key => $grant) {
+      switch ($grant['realm']) {
+        case 'domain_id':
+        case 'domain_site':
+        case 'group_access_authenticated':
+          unset($grants[$key]);
+      }
     }
   }
 }
@@ -55,24 +89,27 @@ function domain_og_node_access_records_alter(&$grants, $node) {
  * Implements hook_node_grants_alter().
  *
  * Based on the new node_access "realm" (domain_og) it grants or revokes access
- * to nodes while ignoring the
- * original node_access settings in Domain Access and Organic Groups
+ * to nodes while ignoring the original node_access settings in Domain Access
+ * and Organic Groups
  */
 function domain_og_node_grants_alter(&$grants, $account, $op) {
-  if (isset($grants['domain_id']) && isset($grants['group_access_authenticated'])) {
-    $user_domains = $grants['domain_id'];
-    $user_groups = $grants['group_access_authenticated'];
-    $domain_og_grants = array();
-    foreach ($user_groups as $og) {
-      foreach ($user_domains as $domain_id) {
-        $domain_og_grants['domain_og'][] = $domain_id . DOMAIN_OG_SEPARATOR . $og;
-      }
+  $user_domains = array();
+  $user_groups = array();
+
+  // We treat domain_site as just another domain with id = 0.
+  if (isset($grants['domain_site'])) {
+    $user_domains = array_merge($user_domains, array(0));
+  }
+  if (!empty($grants['domain_id'])) {
+    $user_domains = array_merge($user_domains, $grants['domain_id']);
+  }
+  if (!empty($grants['group_access_authenticated'])) {
+    $user_groups = array_merge($user_groups, $grants['group_access_authenticated']);
+  }
+
+  foreach ($user_domains as $user_domain) {
+    foreach ($user_groups as $user_group) {
+      $grants['domain_og'][] = DOMAIN_OG_SEPARATOR . $user_domain . DOMAIN_OG_SEPARATOR . $user_group;
     }
-
-    $grants = array_merge($domain_og_grants, $grants);
-
-    //print_r($grants);
-    unset($grants['domain_id']);
-    unset($grants['group_access_authenticated']);
   }
 }
