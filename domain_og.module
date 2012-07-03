@@ -10,18 +10,6 @@
  */
 
 /**
- * Defines a separator between the Domain Access and Organic Groups "gid" so
- * they form a single realm. Since "gid" of a node_access entry must be numeric
- * we need the separator to be a number as well.
- *
- * Kind of hacky but works with up to 10989 domains, as if we would ever
- * need that many
- *
- * @TODO Find a better solution to do this if there is any...
- */
-define('DOMAIN_OG_SEPARATOR', '999');
-
-/**
  * Implements hook_enable(). 
  *
  * Prompt the site admin to rebuild the node_access table when 
@@ -46,9 +34,9 @@ function domain_og_node_access_records_alter(&$grants, $node) {
       case 'domain_id':
         $domain_ids[] = $grant['gid'];
         break;
-      // We treat domain_site as just another domain with id = 0.
+      // We treat domain_site as just another domain with id = 'all'.
       case 'domain_site':
-        $domain_ids[] = '0';
+        $domain_ids[] = 'all';
         break;
       case 'group_access_authenticated':
         $og_grants[] = $grant;
@@ -61,12 +49,12 @@ function domain_og_node_access_records_alter(&$grants, $node) {
   foreach ($domain_ids as $domain_id) {
     foreach ($og_grants as $og_grant) {
       $grants[] = array(
-        'realm' => 'domain_og',
-        'gid' => DOMAIN_OG_SEPARATOR . $domain_id . DOMAIN_OG_SEPARATOR . $og_grant['gid'],
+        'realm' => "domain_og_{$domain_id}",
+        'gid' => $og_grant['gid'],
         'grant_view' => $og_grant['grant_view'],
         'grant_update' => $og_grant['grant_update'],
         'grant_delete' => $og_grant['grant_delete'],
-        'priority' => 0, '#module' => 'domain_og',
+        'priority' => 0,
       );
     }
   }
@@ -96,9 +84,9 @@ function domain_og_node_grants_alter(&$grants, $account, $op) {
   $user_domains = array();
   $user_groups = array();
 
-  // We treat domain_site as just another domain with id = 0.
+  // We treat domain_site as just another domain with id = 'all'.
   if (isset($grants['domain_site'])) {
-    $user_domains = array_merge($user_domains, array(0));
+    $user_domains = array_merge($user_domains, array('all'));
   }
   if (!empty($grants['domain_id'])) {
     $user_domains = array_merge($user_domains, $grants['domain_id']);
@@ -109,7 +97,7 @@ function domain_og_node_grants_alter(&$grants, $account, $op) {
 
   foreach ($user_domains as $user_domain) {
     foreach ($user_groups as $user_group) {
-      $grants['domain_og'][] = DOMAIN_OG_SEPARATOR . $user_domain . DOMAIN_OG_SEPARATOR . $user_group;
+      $grants["domain_og_{$user_domain}"][] = $user_group;
     }
   }
 }
