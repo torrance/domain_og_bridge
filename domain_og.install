@@ -1,0 +1,28 @@
+<?php
+
+/**
+ * Implements hook_enable(). 
+ *
+ * Prompt the site admin to rebuild the node_access table when 
+ * this module is enabled.
+ */
+function domain_og_enable() {
+  node_access_needs_rebuild(TRUE);
+}
+
+/**
+ * Implements hook_disable(). 
+ *
+ * Prompt the site admin to rebuild the node_access table when 
+ * this module is disabled.
+ */
+function domain_og_disable() {
+  node_access_needs_rebuild(TRUE);
+}
+
+/**
+ * Rebuild the node access table to account for changes Organic Groups 2.x.
+ */
+function domain_og_update_7000() {
+  node_access_needs_rebuild(TRUE);
+}

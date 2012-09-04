@@ -10,16 +10,6 @@
  */
 
 /**
- * Implements hook_enable(). 
- *
- * Prompt the site admin to rebuild the node_access table when 
- * this module is enabled.
- */
-function domain_og_enable() {
-  node_access_needs_rebuild(TRUE);
-}
-
-/**
  * Implements hook_node_access_records_alter().
  *
  * Creates a different node_access "realm" (domain_og) by merging the
@@ -38,7 +28,8 @@ function domain_og_node_access_records_alter(&$grants, $node) {
       case 'domain_site':
         $domain_ids[] = 'all';
         break;
-      case 'group_access_authenticated':
+      case 'group_access_authenticated': // OG 1.x
+      case 'og_access:node':             // OG 2.x
         $og_grants[] = $grant;
         break;
     }
@@ -66,7 +57,8 @@ function domain_og_node_access_records_alter(&$grants, $node) {
       switch ($grant['realm']) {
         case 'domain_id':
         case 'domain_site':
-        case 'group_access_authenticated':
+        case 'group_access_authenticated': // OG 1.x
+        case 'og_access:node':             // OG 2.x
           unset($grants[$key]);
       }
     }
@@ -91,8 +83,13 @@ function domain_og_node_grants_alter(&$grants, $account, $op) {
   if (!empty($grants['domain_id'])) {
     $user_domains = array_merge($user_domains, $grants['domain_id']);
   }
+  // OG 1.x
   if (!empty($grants['group_access_authenticated'])) {
     $user_groups = array_merge($user_groups, $grants['group_access_authenticated']);
+  }
+  // OG 2.x
+  if (!empty($grants['og_access:node'])) {
+    $user_groups = array_merge($user_groups, $grants['og_access:node']);
   }
 
   foreach ($user_domains as $user_domain) {
