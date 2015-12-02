@@ -48,6 +48,15 @@ function domain_og_node_access_records_alter(&$grants, $node) {
         'priority' => 0,
       );
     }
+    // Add admin entry too to allow users with appropriate global permissions
+    $grants[] = array(
+      'realm' => "domain_og_{$domain_id}_admin",
+      'gid' => 1,
+      'grant_view' => 1,
+      'grant_update' => 1,
+      'grant_delete' => 1,
+      'priority' => 0,
+    );
   }
 
   // If both domain grants and og grants exist for this node, then we are now
@@ -92,9 +101,15 @@ function domain_og_node_grants_alter(&$grants, $account, $op) {
     $user_groups = array_merge($user_groups, $grants['og_access:node']);
   }
 
+  // Blanket OK permission if user has bypass node access permission.
+  $bypass = user_access('bypass node access');
+
   foreach ($user_domains as $user_domain) {
     foreach ($user_groups as $user_group) {
       $grants["domain_og_{$user_domain}"][] = $user_group;
+    }
+    if ($bypass) {
+      $grants["domain_og_{$user_domain}_admin"][] = 1;
     }
   }
 }
